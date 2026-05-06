@@ -86,6 +86,15 @@ Unity移行後:
 
 次のフェーズで `piano/unity/` を作り、Unity Editor上でMRピアノの土台を作ります。
 
+ブラウザ版では、Unityへ移しやすいように `script.js` を以下の役割に分けています。
+
+- `PianoModel`: 鍵盤データと検索
+- `PianoSoundEngine`: 音の再生と停止
+- `PianoView`: 鍵盤DOMの描画と見た目の状態
+- `PianoController`: キー押下/解放イベントの中心
+- `FingertipInput`: 仮想指先、深度、ホバー、押下判定
+- `PrototypeApp`: 入力イベントの接続とモード管理
+
 想定コンポーネント:
 
 - `PianoKey`

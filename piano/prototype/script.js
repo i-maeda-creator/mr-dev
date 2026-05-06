@@ -14,354 +14,469 @@ const keyData = [
   { id: "C5", type: "white", label: "C5", binding: "K", frequency: 523.25 },
 ];
 
-const keysRoot = document.querySelector("#pianoKeys");
-const instrument = document.querySelector(".instrument");
-const fingertip = document.querySelector("#fingertip");
-const modeButtons = document.querySelectorAll(".mode-button");
-const modeStatus = document.querySelector("#modeStatus");
-const depthMeter = document.querySelector(".depth-meter");
-const depthFill = document.querySelector("#depthFill");
-const depthLabel = document.querySelector("#depthLabel");
-const pressedKeys = new Map();
-const pointerPressedKeys = new Set();
 const PRESS_DEPTH = 0.65;
 const TOUCH_DEPTH = 0.25;
-let currentMode = "play";
-let fingertipPointerId = null;
-let fingertipKeyId = null;
-let fingertipHoverKeyId = null;
-let fingertipDepth = 0;
-let lastFingertipPoint = null;
-let audioContext;
 
-function ensureAudioContext() {
-  if (!audioContext) {
-    audioContext = new AudioContext();
+class PianoModel {
+  constructor(keys) {
+    this.keys = keys;
   }
 
-  if (audioContext.state === "suspended") {
-    audioContext.resume();
+  get whiteKeys() {
+    return this.keys.filter((key) => key.type === "white");
   }
 
-  return audioContext;
-}
-
-function createVoice(frequency) {
-  const context = ensureAudioContext();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  const now = context.currentTime;
-
-  oscillator.type = "triangle";
-  oscillator.frequency.setValueAtTime(frequency, now);
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.22, now + 0.012);
-  gain.gain.exponentialRampToValueAtTime(0.12, now + 0.16);
-
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start(now);
-
-  return { oscillator, gain };
-}
-
-function stopVoice(voice) {
-  const context = ensureAudioContext();
-  const now = context.currentTime;
-
-  voice.gain.gain.cancelScheduledValues(now);
-  voice.gain.gain.setValueAtTime(Math.max(voice.gain.gain.value, 0.0001), now);
-  voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
-  voice.oscillator.stop(now + 0.09);
-}
-
-function pressKey(id) {
-  if (pressedKeys.has(id)) {
-    return;
+  get blackKeys() {
+    return this.keys.filter((key) => key.type === "black");
   }
 
-  const key = keyData.find((item) => item.id === id);
-  const element = document.querySelector(`[data-key-id="${CSS.escape(id)}"]`);
-
-  if (!key || !element) {
-    return;
+  findById(id) {
+    return this.keys.find((key) => key.id === id);
   }
 
-  element.classList.add("is-pressed");
-  pressedKeys.set(id, createVoice(key.frequency));
+  findByBinding(binding) {
+    return this.keys.find((key) => key.binding.toLowerCase() === binding.toLowerCase());
+  }
 }
 
-function releaseKey(id) {
-  const voice = pressedKeys.get(id);
-  const element = document.querySelector(`[data-key-id="${CSS.escape(id)}"]`);
-
-  if (!voice) {
-    return;
+class PianoSoundEngine {
+  constructor() {
+    this.audioContext = null;
+    this.voices = new Map();
   }
 
-  element?.classList.remove("is-pressed");
-  stopVoice(voice);
-  pressedKeys.delete(id);
-}
+  press(key) {
+    if (!key || this.voices.has(key.id)) {
+      return;
+    }
 
-function setMode(mode) {
-  currentMode = mode;
-  modeButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.mode === mode);
-  });
-  depthMeter.classList.toggle("is-visible", mode === "fingertip");
-
-  if (mode === "play") {
-    modeStatus.textContent = "Keyboard and pointer input";
-    resetFingertip();
-    return;
+    this.voices.set(key.id, this.createVoice(key.frequency));
   }
 
-  modeStatus.textContent = "Move to aim, hold pointer or Space to press";
-  setFingertipDepth(0);
+  release(keyId) {
+    const voice = this.voices.get(keyId);
+
+    if (!voice) {
+      return;
+    }
+
+    this.stopVoice(voice);
+    this.voices.delete(keyId);
+  }
+
+  ensureAudioContext() {
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext();
+    }
+
+    if (this.audioContext.state === "suspended") {
+      this.audioContext.resume();
+    }
+
+    return this.audioContext;
+  }
+
+  createVoice(frequency) {
+    const context = this.ensureAudioContext();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const now = context.currentTime;
+
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(frequency, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.22, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.16);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(now);
+
+    return { oscillator, gain };
+  }
+
+  stopVoice(voice) {
+    const context = this.ensureAudioContext();
+    const now = context.currentTime;
+
+    voice.gain.gain.cancelScheduledValues(now);
+    voice.gain.gain.setValueAtTime(Math.max(voice.gain.gain.value, 0.0001), now);
+    voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    voice.oscillator.stop(now + 0.09);
+  }
 }
 
-function renderKeys() {
-  const whiteKeys = keyData.filter((key) => key.type === "white");
-  const blackKeys = keyData.filter((key) => key.type === "black");
+class PianoView {
+  constructor({ keysRoot, model }) {
+    this.keysRoot = keysRoot;
+    this.model = model;
+  }
 
-  whiteKeys.forEach((key) => {
+  render() {
+    this.model.whiteKeys.forEach((key) => this.keysRoot.append(this.createWhiteKey(key)));
+    this.model.blackKeys.forEach((key) => this.keysRoot.append(this.createBlackKey(key)));
+  }
+
+  setPressed(keyId, isPressed) {
+    this.keyElement(keyId)?.classList.toggle("is-pressed", isPressed);
+  }
+
+  setHovered(keyId, isHovered) {
+    this.keyElement(keyId)?.classList.toggle("is-hovered", isHovered);
+  }
+
+  keyAtPoint(clientX, clientY) {
+    const elements = document.elementsFromPoint(clientX, clientY);
+    return elements.find((element) => element.classList?.contains("key"))?.dataset.keyId ?? null;
+  }
+
+  keyElement(keyId) {
+    return document.querySelector(`[data-key-id="${CSS.escape(keyId)}"]`);
+  }
+
+  createWhiteKey(key) {
+    const button = this.createKeyButton(key);
+    button.classList.add("white-key");
+    return button;
+  }
+
+  createBlackKey(key) {
+    const button = this.createKeyButton(key);
+    button.classList.add("black-key");
+    button.style.left = `${(key.afterWhite / this.model.whiteKeys.length) * 100}%`;
+    return button;
+  }
+
+  createKeyButton(key) {
     const button = document.createElement("button");
-    button.className = "key white-key";
+    button.className = "key";
     button.dataset.keyId = key.id;
     button.type = "button";
     button.innerHTML = `<span class="key-label"><strong>${key.binding}</strong><span>${key.label}</span></span>`;
-    keysRoot.append(button);
-  });
-
-  blackKeys.forEach((key) => {
-    const button = document.createElement("button");
-    button.className = "key black-key";
-    button.dataset.keyId = key.id;
-    button.type = "button";
-    button.style.left = `${(key.afterWhite / whiteKeys.length) * 100}%`;
-    button.innerHTML = `<span class="key-label"><strong>${key.binding}</strong><span>${key.label}</span></span>`;
-    keysRoot.append(button);
-  });
-}
-
-function keyForBinding(binding) {
-  return keyData.find((key) => key.binding.toLowerCase() === binding.toLowerCase());
-}
-
-function keyAtPoint(clientX, clientY) {
-  const elements = document.elementsFromPoint(clientX, clientY);
-  return elements.find((element) => element.classList?.contains("key"));
-}
-
-function moveFingertip(event) {
-  const bounds = instrument.getBoundingClientRect();
-  const x = event.clientX - bounds.left + instrument.scrollLeft;
-  const y = event.clientY - bounds.top + instrument.scrollTop;
-
-  lastFingertipPoint = { clientX: event.clientX, clientY: event.clientY };
-  fingertip.style.left = `${x}px`;
-  fingertip.style.top = `${y}px`;
-  fingertip.classList.add("is-visible");
-  updateFingertipTarget(event.clientX, event.clientY);
-}
-
-function setFingertipDepth(depth) {
-  fingertipDepth = Math.max(0, Math.min(1, depth));
-  depthFill.style.width = `${fingertipDepth * 100}%`;
-
-  const isTouching = fingertipDepth >= TOUCH_DEPTH;
-  const isPressing = fingertipDepth >= PRESS_DEPTH;
-  fingertip.classList.toggle("is-touching", isTouching);
-  fingertip.classList.toggle("is-pressing", isPressing);
-
-  if (isPressing) {
-    depthLabel.textContent = "Press";
-  } else if (isTouching) {
-    depthLabel.textContent = "Touch";
-  } else {
-    depthLabel.textContent = "Air";
-  }
-
-  if (lastFingertipPoint) {
-    updateFingertipTarget(lastFingertipPoint.clientX, lastFingertipPoint.clientY);
+    return button;
   }
 }
 
-function updateFingertipTarget(clientX, clientY) {
-  const keyElement = keyAtPoint(clientX, clientY);
-  const nextKeyId = keyElement?.dataset.keyId ?? null;
-
-  setFingertipHover(nextKeyId);
-
-  if (fingertipDepth < PRESS_DEPTH) {
-    releaseFingertipKey();
-    return;
+class PianoController {
+  constructor({ model, view, sound }) {
+    this.model = model;
+    this.view = view;
+    this.sound = sound;
+    this.pressedKeys = new Set();
   }
 
-  if (nextKeyId && nextKeyId !== fingertipKeyId) {
-    releaseFingertipKey();
-    fingertipKeyId = nextKeyId;
-    pressKey(nextKeyId);
+  press(keyId) {
+    if (this.pressedKeys.has(keyId)) {
+      return;
+    }
+
+    const key = this.model.findById(keyId);
+
+    if (!key) {
+      return;
+    }
+
+    this.pressedKeys.add(keyId);
+    this.view.setPressed(keyId, true);
+    this.sound.press(key);
   }
-}
 
-function setFingertipHover(id) {
-  if (id === fingertipHoverKeyId) {
-    return;
-  }
+  release(keyId) {
+    if (!this.pressedKeys.has(keyId)) {
+      return;
+    }
 
-  if (fingertipHoverKeyId) {
-    document.querySelector(`[data-key-id="${CSS.escape(fingertipHoverKeyId)}"]`)?.classList.remove("is-hovered");
-  }
-
-  fingertipHoverKeyId = id;
-
-  if (fingertipHoverKeyId) {
-    document.querySelector(`[data-key-id="${CSS.escape(fingertipHoverKeyId)}"]`)?.classList.add("is-hovered");
-  }
-}
-
-function releaseFingertipKey() {
-  if (fingertipKeyId) {
-    releaseKey(fingertipKeyId);
-    fingertipKeyId = null;
+    this.pressedKeys.delete(keyId);
+    this.view.setPressed(keyId, false);
+    this.sound.release(keyId);
   }
 }
 
-function resetFingertip() {
-  fingertipPointerId = null;
-  lastFingertipPoint = null;
-  setFingertipDepth(0);
-  setFingertipHover(null);
-  releaseFingertipKey();
-  fingertip.classList.remove("is-visible", "is-touching", "is-pressing");
+class FingertipInput {
+  constructor({ instrument, fingertip, depthMeter, depthFill, depthLabel, view, controller }) {
+    this.instrument = instrument;
+    this.fingertip = fingertip;
+    this.depthMeter = depthMeter;
+    this.depthFill = depthFill;
+    this.depthLabel = depthLabel;
+    this.view = view;
+    this.controller = controller;
+    this.pointerId = null;
+    this.activeKeyId = null;
+    this.hoverKeyId = null;
+    this.depth = 0;
+    this.lastPoint = null;
+  }
+
+  setEnabled(isEnabled) {
+    this.depthMeter.classList.toggle("is-visible", isEnabled);
+
+    if (!isEnabled) {
+      this.reset();
+      return;
+    }
+
+    this.setDepth(0);
+  }
+
+  move(event) {
+    const bounds = this.instrument.getBoundingClientRect();
+    const x = event.clientX - bounds.left + this.instrument.scrollLeft;
+    const y = event.clientY - bounds.top + this.instrument.scrollTop;
+
+    this.lastPoint = { clientX: event.clientX, clientY: event.clientY };
+    this.fingertip.style.left = `${x}px`;
+    this.fingertip.style.top = `${y}px`;
+    this.fingertip.classList.add("is-visible");
+    this.updateTarget(event.clientX, event.clientY);
+  }
+
+  setDepth(depth) {
+    this.depth = Math.max(0, Math.min(1, depth));
+    this.depthFill.style.width = `${this.depth * 100}%`;
+
+    const isTouching = this.depth >= TOUCH_DEPTH;
+    const isPressing = this.depth >= PRESS_DEPTH;
+    this.fingertip.classList.toggle("is-touching", isTouching);
+    this.fingertip.classList.toggle("is-pressing", isPressing);
+
+    if (isPressing) {
+      this.depthLabel.textContent = "Press";
+    } else if (isTouching) {
+      this.depthLabel.textContent = "Touch";
+    } else {
+      this.depthLabel.textContent = "Air";
+    }
+
+    if (this.lastPoint) {
+      this.updateTarget(this.lastPoint.clientX, this.lastPoint.clientY);
+    }
+  }
+
+  updateTarget(clientX, clientY) {
+    const nextKeyId = this.view.keyAtPoint(clientX, clientY);
+    this.setHover(nextKeyId);
+
+    if (this.depth < PRESS_DEPTH) {
+      this.releaseActiveKey();
+      return;
+    }
+
+    if (nextKeyId && nextKeyId !== this.activeKeyId) {
+      this.releaseActiveKey();
+      this.activeKeyId = nextKeyId;
+      this.controller.press(nextKeyId);
+    }
+  }
+
+  setHover(keyId) {
+    if (keyId === this.hoverKeyId) {
+      return;
+    }
+
+    if (this.hoverKeyId) {
+      this.view.setHovered(this.hoverKeyId, false);
+    }
+
+    this.hoverKeyId = keyId;
+
+    if (this.hoverKeyId) {
+      this.view.setHovered(this.hoverKeyId, true);
+    }
+  }
+
+  releaseActiveKey() {
+    if (this.activeKeyId) {
+      this.controller.release(this.activeKeyId);
+      this.activeKeyId = null;
+    }
+  }
+
+  hide() {
+    if (this.pointerId === null) {
+      this.fingertip.classList.remove("is-visible");
+      this.setHover(null);
+    }
+  }
+
+  reset() {
+    this.pointerId = null;
+    this.lastPoint = null;
+    this.setDepth(0);
+    this.setHover(null);
+    this.releaseActiveKey();
+    this.fingertip.classList.remove("is-visible", "is-touching", "is-pressing");
+  }
 }
 
-renderKeys();
-
-keysRoot.addEventListener("pointerdown", (event) => {
-  if (currentMode !== "play") {
-    return;
+class PrototypeApp {
+  constructor() {
+    this.mode = "play";
+    this.pointerPressedKeys = new Set();
+    this.model = new PianoModel(keyData);
+    this.view = new PianoView({
+      keysRoot: document.querySelector("#pianoKeys"),
+      model: this.model,
+    });
+    this.sound = new PianoSoundEngine();
+    this.controller = new PianoController({
+      model: this.model,
+      view: this.view,
+      sound: this.sound,
+    });
+    this.elements = {
+      instrument: document.querySelector(".instrument"),
+      modeButtons: document.querySelectorAll(".mode-button"),
+      modeStatus: document.querySelector("#modeStatus"),
+    };
+    this.fingertipInput = new FingertipInput({
+      instrument: this.elements.instrument,
+      fingertip: document.querySelector("#fingertip"),
+      depthMeter: document.querySelector(".depth-meter"),
+      depthFill: document.querySelector("#depthFill"),
+      depthLabel: document.querySelector("#depthLabel"),
+      view: this.view,
+      controller: this.controller,
+    });
   }
 
-  const keyElement = event.target.closest(".key");
-
-  if (!keyElement) {
-    return;
+  start() {
+    this.view.render();
+    this.bindModeControls();
+    this.bindPlayPointerInput();
+    this.bindFingertipInput();
+    this.bindKeyboardInput();
   }
 
-  keyElement.setPointerCapture(event.pointerId);
-  pointerPressedKeys.add(keyElement.dataset.keyId);
-  pressKey(keyElement.dataset.keyId);
-});
+  setMode(mode) {
+    this.mode = mode;
+    this.elements.modeButtons.forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.mode === mode);
+    });
 
-keysRoot.addEventListener("pointerup", (event) => {
-  if (currentMode !== "play") {
-    return;
+    this.fingertipInput.setEnabled(mode === "fingertip");
+    this.elements.modeStatus.textContent =
+      mode === "play" ? "Keyboard and pointer input" : "Move to aim, hold pointer or Space to press";
   }
 
-  const keyElement = event.target.closest(".key");
-
-  if (keyElement && pointerPressedKeys.has(keyElement.dataset.keyId)) {
-    pointerPressedKeys.delete(keyElement.dataset.keyId);
-    releaseKey(keyElement.dataset.keyId);
-  }
-});
-
-keysRoot.addEventListener("pointercancel", (event) => {
-  if (currentMode !== "play") {
-    return;
+  bindModeControls() {
+    this.elements.modeButtons.forEach((button) => {
+      button.addEventListener("click", () => this.setMode(button.dataset.mode));
+    });
   }
 
-  const keyElement = event.target.closest(".key");
+  bindPlayPointerInput() {
+    this.view.keysRoot.addEventListener("pointerdown", (event) => {
+      if (this.mode !== "play") {
+        return;
+      }
 
-  if (keyElement && pointerPressedKeys.has(keyElement.dataset.keyId)) {
-    pointerPressedKeys.delete(keyElement.dataset.keyId);
-    releaseKey(keyElement.dataset.keyId);
-  }
-});
+      const keyElement = event.target.closest(".key");
 
-instrument.addEventListener("pointerdown", (event) => {
-  if (currentMode !== "fingertip") {
-    return;
-  }
+      if (!keyElement) {
+        return;
+      }
 
-  event.preventDefault();
-  fingertipPointerId = event.pointerId;
-  instrument.setPointerCapture(event.pointerId);
-  moveFingertip(event);
-  setFingertipDepth(1);
-});
+      keyElement.setPointerCapture(event.pointerId);
+      this.pointerPressedKeys.add(keyElement.dataset.keyId);
+      this.controller.press(keyElement.dataset.keyId);
+    });
 
-instrument.addEventListener("pointermove", (event) => {
-  if (currentMode !== "fingertip") {
-    return;
-  }
+    const releasePointerKey = (event) => {
+      if (this.mode !== "play") {
+        return;
+      }
 
-  moveFingertip(event);
-});
+      const keyElement = event.target.closest(".key");
 
-instrument.addEventListener("pointerup", (event) => {
-  if (event.pointerId !== fingertipPointerId) {
-    return;
-  }
+      if (keyElement && this.pointerPressedKeys.has(keyElement.dataset.keyId)) {
+        this.pointerPressedKeys.delete(keyElement.dataset.keyId);
+        this.controller.release(keyElement.dataset.keyId);
+      }
+    };
 
-  fingertipPointerId = null;
-  setFingertipDepth(0);
-});
-
-instrument.addEventListener("pointerleave", () => {
-  if (currentMode === "fingertip" && fingertipPointerId === null) {
-    fingertip.classList.remove("is-visible");
-    setFingertipHover(null);
-  }
-});
-
-instrument.addEventListener("pointercancel", () => {
-  resetFingertip();
-});
-
-modeButtons.forEach((button) => {
-  button.addEventListener("click", () => setMode(button.dataset.mode));
-});
-
-window.addEventListener("keydown", (event) => {
-  if (event.repeat) {
-    return;
+    this.view.keysRoot.addEventListener("pointerup", releasePointerKey);
+    this.view.keysRoot.addEventListener("pointercancel", releasePointerKey);
   }
 
-  if (currentMode === "fingertip" && event.code === "Space") {
-    event.preventDefault();
-    setFingertipDepth(1);
-    return;
+  bindFingertipInput() {
+    this.elements.instrument.addEventListener("pointerdown", (event) => {
+      if (this.mode !== "fingertip") {
+        return;
+      }
+
+      event.preventDefault();
+      this.fingertipInput.pointerId = event.pointerId;
+      this.elements.instrument.setPointerCapture(event.pointerId);
+      this.fingertipInput.move(event);
+      this.fingertipInput.setDepth(1);
+    });
+
+    this.elements.instrument.addEventListener("pointermove", (event) => {
+      if (this.mode === "fingertip") {
+        this.fingertipInput.move(event);
+      }
+    });
+
+    this.elements.instrument.addEventListener("pointerup", (event) => {
+      if (event.pointerId === this.fingertipInput.pointerId) {
+        this.fingertipInput.pointerId = null;
+        this.fingertipInput.setDepth(0);
+      }
+    });
+
+    this.elements.instrument.addEventListener("pointerleave", () => {
+      if (this.mode === "fingertip") {
+        this.fingertipInput.hide();
+      }
+    });
+
+    this.elements.instrument.addEventListener("pointercancel", () => {
+      this.fingertipInput.reset();
+    });
   }
 
-  if (currentMode !== "play") {
-    return;
+  bindKeyboardInput() {
+    window.addEventListener("keydown", (event) => {
+      if (event.repeat) {
+        return;
+      }
+
+      if (this.mode === "fingertip" && event.code === "Space") {
+        event.preventDefault();
+        this.fingertipInput.setDepth(1);
+        return;
+      }
+
+      if (this.mode !== "play") {
+        return;
+      }
+
+      const key = this.model.findByBinding(event.key);
+
+      if (key) {
+        this.controller.press(key.id);
+      }
+    });
+
+    window.addEventListener("keyup", (event) => {
+      if (this.mode === "fingertip" && event.code === "Space") {
+        event.preventDefault();
+        this.fingertipInput.setDepth(0);
+        return;
+      }
+
+      if (this.mode !== "play") {
+        return;
+      }
+
+      const key = this.model.findByBinding(event.key);
+
+      if (key) {
+        this.controller.release(key.id);
+      }
+    });
   }
+}
 
-  const key = keyForBinding(event.key);
-
-  if (key) {
-    pressKey(key.id);
-  }
-});
-
-window.addEventListener("keyup", (event) => {
-  if (currentMode === "fingertip" && event.code === "Space") {
-    event.preventDefault();
-    setFingertipDepth(0);
-    return;
-  }
-
-  if (currentMode !== "play") {
-    return;
-  }
-
-  const key = keyForBinding(event.key);
-
-  if (key) {
-    releaseKey(key.id);
-  }
-});
+new PrototypeApp().start();
