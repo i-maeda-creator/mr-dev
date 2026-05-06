@@ -1,77 +1,101 @@
-# Architecture Notes
+# 設計メモ
 
-## Core Idea
+## 基本方針
 
-The MR piano should be split into small systems so the desktop prototype can evolve into a Unity/Quest implementation without rewriting the musical logic from scratch.
+MRピアノは、あとからUnity/Quest実装へ移せるように、小さなシステムに分けて考えます。
 
-## Systems
+重要なのは、入力、音、鍵盤の見た目を密結合にしすぎないことです。指で押した場合でも、キーボードで押した場合でも、最終的には同じ「キーが押された」「キーが離された」というイベントに変換します。
+
+## システム
 
 ### Piano Layout
 
-Responsible for defining keys, note names, MIDI note numbers, visual positions, and key dimensions.
+鍵盤の定義を担当します。
 
-Initial target:
+含めるもの:
 
-- 8 white keys from C4 to C5
-- 5 black keys
-- Single octave plus top C
+- キーID
+- 音名
+- MIDIノート番号
+- 周波数
+- 白鍵/黒鍵
+- 位置とサイズ
+
+初期ターゲット:
+
+- C4からC5まで
+- 白鍵8個
+- 黒鍵5個
+- 1オクターブ + 上のC
 
 ### Input
 
-Responsible for converting a user action into a key press or release.
+ユーザー操作をキー入力に変換します。
 
-Prototype inputs:
+現在のプロトタイプ入力:
 
-- PC keyboard
-- Mouse or touch pointer
-- Virtual fingertip collision mode
-- Simulated fingertip depth with air, touch, and press states
+- PCキーボード
+- マウス/タッチ
+- 仮想指先
+- `Air / Touch / Press` の押し込み深度
 
-Future MR inputs:
+将来のMR入力:
 
-- Tracked fingertip pose
-- Collision volume above each key
-- Press depth threshold
+- 手の指先座標
+- 鍵盤上の当たり判定エリア
+- 押し込み深度のしきい値
+- 横から触れた場合の除外
 
 ### Sound
 
-Responsible for playing notes with low latency and overlapping voices.
+低遅延で音を鳴らす部分です。
 
-Prototype:
+現在:
 
-- Web Audio oscillator voices
-- Short attack and release envelope
+- Web Audio API
+- oscillatorによる簡易音源
+- 短いattack/release
+- 同時発音
 
-Future:
+Unity移行後:
 
-- Unity AudioSource pool
-- Sample-based piano notes or a lightweight synth
-- Optional MIDI output
+- AudioSourceプール
+- サンプルベースのピアノ音源
+- 軽量シンセ
+- 必要ならMIDI出力
 
 ### Feedback
 
-Responsible for making the instrument feel responsive.
+弾いた感触を視覚的に返す部分です。
 
-Prototype:
+現在:
 
-- Key color change
-- Small key depression transform
+- 鍵盤の色変更
+- 鍵盤の押し下げ表示
+- 指先ホバー
+- 深度メーター
 
-Future:
+将来:
 
-- Physical key depression
-- Haptic proxy feedback if available
-- Lighted practice mode
+- 物理的な鍵盤沈み込み
+- 光る鍵盤
+- 練習モード
+- 可能ならハプティック代替表現
 
-## Unity Migration Shape
+## Unity移行案
 
-Suggested Unity components later:
+次のフェーズで `piano/unity/` を作り、Unity Editor上でMRピアノの土台を作ります。
+
+想定コンポーネント:
 
 - `PianoKey`
 - `PianoLayoutBuilder`
 - `PianoInputRouter`
 - `KeyboardInputProvider`
+- `VirtualFingertipInputProvider`
 - `HandTrackingInputProvider`
 - `PianoSoundEngine`
 
-The important boundary is that input providers should only say "key down" and "key up". They should not own note playback or key animation directly.
+大事な境界:
+
+入力プロバイダーは「どのキーが押されたか/離されたか」だけを通知します。音の再生や鍵盤アニメーションは、別のシステムが受け持ちます。

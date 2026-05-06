@@ -1,29 +1,36 @@
 # MR Dev
 
-Personal mixed-reality development lab.
+個人でMR（複合現実）アプリを開発していくためのリポジトリです。
 
-This repository collects small MR experiments and playable prototypes. The first project is an MR piano, starting as a browser prototype before moving toward Meta Quest 3 and Unity.
+まずはMRピアノから始めています。将来的には、テニス、ボクシング、野球など、身体を使うMRプロトタイプもここに増やしていきます。
 
-## Projects
+## プロジェクト
 
 ### Piano
 
-Location: `piano/`
+場所: `piano/`
 
-Current state:
+現在の状態:
 
-- Desktop browser prototype
-- 1-octave playable keyboard
-- PC keyboard and pointer input
-- Web Audio sound playback
+- ブラウザで動くデスクトッププロトタイプ
+- 1オクターブの鍵盤
+- PCキーボード、マウス、タッチ入力
+- 仮想指先による押し込みテスト
+- Web Audio APIによる音の再生
 
-Open `piano/prototype/index.html` in a browser to try it.
+試すには `piano/prototype/index.html` をブラウザで開きます。
 
-## Future Ideas
+## 今後作りたいもの
 
-- Tennis
-- Boxing
-- Baseball
-- Training tools
-- Spatial music and practice tools
+- ピアノ
+- テニス
+- ボクシング
+- 野球
+- トレーニングツール
+- 空間音楽、練習支援ツール
 
+## 方針
+
+最初からQuest 3実機だけに依存せず、PC上で検証できる部分を先に作ります。
+
+そのあとUnityへ移し、Quest 3を入手した時点でMeta XR SDK、ハンドトラッキング、パススルーMRへ接続していきます。

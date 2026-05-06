@@ -1,44 +1,73 @@
 # MR Piano
 
-Personal mixed-reality piano project.
+MR空間で弾けるピアノを作るプロジェクトです。
 
-The long-term goal is a playable piano in MR, aimed first at Meta Quest 3. Since the headset is not available yet, this repository starts with a browser-based interaction prototype that proves the core instrument logic:
+長期目標は、Meta Quest 3上で、現実空間に置いた仮想鍵盤を手で弾けるようにすることです。まだQuest 3実機がないので、まずはブラウザ上で「楽器として必要な部分」と「MRに移しやすい入力判定」を育てています。
 
-- Key layout
-- Note mapping
-- Keyboard and pointer input
-- Polyphonic sound playback
-- Visual key press feedback
+## 現在のプロトタイプ
 
-## Current Prototype
+リポジトリ直下から `piano/prototype/index.html` を開くか、このフォルダ内から `prototype/index.html` を開きます。
 
-Open `piano/prototype/index.html` in a browser from the repository root, or open `prototype/index.html` from inside this folder.
+操作:
 
-Controls:
+- 白鍵: `A S D F G H J K`
+- 黒鍵: `W E T Y U`
+- マウス/タッチ: 画面上の鍵盤を押す
+- `Fingertip` モード: 仮想指先を動かし、マウス押下または `Space` で押し込み深度をシミュレーションする
 
-- White keys: `A S D F G H J K`
-- Black keys: `W E T Y U`
-- Mouse/touch: press the on-screen keys
-- `Fingertip` mode: move the virtual fingertip, then hold pointer or `Space` to simulate press depth
+ブラウザ版はWeb Audio APIを使っているため、外部依存なしで動きます。
 
-The browser prototype uses the Web Audio API, so no external dependencies are required.
+## なぜブラウザから始めるのか
 
-## Development Roadmap
+MRピアノの難所は、きれいな3Dモデルよりも「弾いた瞬間に気持ちよく反応すること」です。
 
-1. Build a playable 1-octave piano prototype on desktop.
-2. Separate piano logic from input logic.
-3. Add a virtual fingertip object for collision-style testing.
-4. Move the interaction model into Unity.
-5. Add Meta XR SDK integration after Quest 3 hardware is available.
-6. Tune latency, hand tracking, spatial placement, and scale.
+そのため、まずPC上で次の要素を検証します。
 
-## Repository Structure
+- 鍵盤配置
+- 音階マッピング
+- 同時発音
+- 押した時の見た目の反応
+- 指先位置と鍵盤の当たり判定
+- 押し込み深度のしきい値
+
+## Unityはいつ出てくるか
+
+Unityは次の大きなフェーズで使います。
+
+今のブラウザ版で、入力ロジックと鍵盤ロジックをもう少し分離したら、`piano/unity/` にUnityプロジェクトを作ります。Quest 3がなくても、Unity Editor上で以下は進められます。
+
+- 3D鍵盤の生成
+- 鍵盤ごとのCollider
+- 仮想指先オブジェクト
+- 押し込み深度の判定
+- AudioSourceによる音の再生
+- PC上でのデバッグ入力
+
+Quest 3を入手したあとに追加するもの:
+
+- Meta XR SDK
+- ハンドトラッキング
+- パススルーMR
+- 空間アンカー
+- 実機でのレイテンシ調整
+
+## 開発ロードマップ
+
+1. ブラウザで1オクターブの演奏プロトタイプを作る。
+2. 仮想指先と押し込み深度を追加する。
+3. 鍵盤、音、入力のロジックを分離する。
+4. Unityプロジェクトを作り、ブラウザ版の考え方を移植する。
+5. Quest 3入手後にMeta XR SDKを接続する。
+6. 手の追跡、空間配置、音の遅延、スケール感を調整する。
+
+## 構成
 
 ```text
-prototype/
-  index.html
-  styles.css
-  script.js
-docs/
-  architecture.md
+piano/
+  prototype/
+    index.html
+    styles.css
+    script.js
+  docs/
+    architecture.md
 ```
