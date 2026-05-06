@@ -99,6 +99,52 @@ h1 {
   font-size: 0.9rem;
 }
 
+.depth-meter {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  width: min(360px, 100%);
+  margin-top: 14px;
+}
+
+.depth-meter.is-visible {
+  display: flex;
+}
+
+.depth-label {
+  width: 54px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.depth-track {
+  position: relative;
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.depth-fill {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  transition: width 0.08s ease;
+}
+
+.depth-threshold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 65%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
 .instrument {
   position: relative;
   padding: 18px;
@@ -128,6 +174,10 @@ h1 {
   opacity: 1;
 }
 
+.fingertip.is-touching {
+  background: rgba(229, 185, 95, 0.58);
+}
+
 .fingertip.is-pressing {
   width: 24px;
   height: 24px;
@@ -152,6 +202,11 @@ h1 {
   cursor: pointer;
   user-select: none;
   touch-action: none;
+}
+
+.key.is-hovered {
+  outline: 2px solid rgba(229, 185, 95, 0.72);
+  outline-offset: -5px;
 }
 
 .white-key {

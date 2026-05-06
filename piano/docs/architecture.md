@@ -25,6 +25,7 @@ Prototype inputs:
 - PC keyboard
 - Mouse or touch pointer
 - Virtual fingertip collision mode
+- Simulated fingertip depth with air, touch, and press states
 
 Future MR inputs:
 

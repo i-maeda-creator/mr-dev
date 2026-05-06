@@ -19,11 +19,19 @@ const instrument = document.querySelector(".instrument");
 const fingertip = document.querySelector("#fingertip");
 const modeButtons = document.querySelectorAll(".mode-button");
 const modeStatus = document.querySelector("#modeStatus");
+const depthMeter = document.querySelector(".depth-meter");
+const depthFill = document.querySelector("#depthFill");
+const depthLabel = document.querySelector("#depthLabel");
 const pressedKeys = new Map();
 const pointerPressedKeys = new Set();
+const PRESS_DEPTH = 0.65;
+const TOUCH_DEPTH = 0.25;
 let currentMode = "play";
 let fingertipPointerId = null;
 let fingertipKeyId = null;
+let fingertipHoverKeyId = null;
+let fingertipDepth = 0;
+let lastFingertipPoint = null;
 let audioContext;
 
 function ensureAudioContext() {
@@ -101,15 +109,16 @@ function setMode(mode) {
   modeButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.mode === mode);
   });
+  depthMeter.classList.toggle("is-visible", mode === "fingertip");
 
   if (mode === "play") {
     modeStatus.textContent = "Keyboard and pointer input";
-    fingertip.classList.remove("is-visible", "is-pressing");
-    releaseFingertipKey();
+    resetFingertip();
     return;
   }
 
-  modeStatus.textContent = "Drag the virtual fingertip across keys";
+  modeStatus.textContent = "Move to aim, hold pointer or Space to press";
+  setFingertipDepth(0);
 }
 
 function renderKeys() {
@@ -150,24 +159,66 @@ function moveFingertip(event) {
   const x = event.clientX - bounds.left + instrument.scrollLeft;
   const y = event.clientY - bounds.top + instrument.scrollTop;
 
+  lastFingertipPoint = { clientX: event.clientX, clientY: event.clientY };
   fingertip.style.left = `${x}px`;
   fingertip.style.top = `${y}px`;
   fingertip.classList.add("is-visible");
+  updateFingertipTarget(event.clientX, event.clientY);
 }
 
-function pressFingertipKey(event) {
-  const keyElement = keyAtPoint(event.clientX, event.clientY);
+function setFingertipDepth(depth) {
+  fingertipDepth = Math.max(0, Math.min(1, depth));
+  depthFill.style.width = `${fingertipDepth * 100}%`;
+
+  const isTouching = fingertipDepth >= TOUCH_DEPTH;
+  const isPressing = fingertipDepth >= PRESS_DEPTH;
+  fingertip.classList.toggle("is-touching", isTouching);
+  fingertip.classList.toggle("is-pressing", isPressing);
+
+  if (isPressing) {
+    depthLabel.textContent = "Press";
+  } else if (isTouching) {
+    depthLabel.textContent = "Touch";
+  } else {
+    depthLabel.textContent = "Air";
+  }
+
+  if (lastFingertipPoint) {
+    updateFingertipTarget(lastFingertipPoint.clientX, lastFingertipPoint.clientY);
+  }
+}
+
+function updateFingertipTarget(clientX, clientY) {
+  const keyElement = keyAtPoint(clientX, clientY);
   const nextKeyId = keyElement?.dataset.keyId ?? null;
 
-  if (nextKeyId === fingertipKeyId) {
+  setFingertipHover(nextKeyId);
+
+  if (fingertipDepth < PRESS_DEPTH) {
+    releaseFingertipKey();
     return;
   }
 
-  releaseFingertipKey();
-
-  if (nextKeyId) {
+  if (nextKeyId && nextKeyId !== fingertipKeyId) {
+    releaseFingertipKey();
     fingertipKeyId = nextKeyId;
     pressKey(nextKeyId);
+  }
+}
+
+function setFingertipHover(id) {
+  if (id === fingertipHoverKeyId) {
+    return;
+  }
+
+  if (fingertipHoverKeyId) {
+    document.querySelector(`[data-key-id="${CSS.escape(fingertipHoverKeyId)}"]`)?.classList.remove("is-hovered");
+  }
+
+  fingertipHoverKeyId = id;
+
+  if (fingertipHoverKeyId) {
+    document.querySelector(`[data-key-id="${CSS.escape(fingertipHoverKeyId)}"]`)?.classList.add("is-hovered");
   }
 }
 
@@ -176,6 +227,15 @@ function releaseFingertipKey() {
     releaseKey(fingertipKeyId);
     fingertipKeyId = null;
   }
+}
+
+function resetFingertip() {
+  fingertipPointerId = null;
+  lastFingertipPoint = null;
+  setFingertipDepth(0);
+  setFingertipHover(null);
+  releaseFingertipKey();
+  fingertip.classList.remove("is-visible", "is-touching", "is-pressing");
 }
 
 renderKeys();
@@ -230,9 +290,8 @@ instrument.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   fingertipPointerId = event.pointerId;
   instrument.setPointerCapture(event.pointerId);
-  fingertip.classList.add("is-pressing");
   moveFingertip(event);
-  pressFingertipKey(event);
+  setFingertipDepth(1);
 });
 
 instrument.addEventListener("pointermove", (event) => {
@@ -241,10 +300,6 @@ instrument.addEventListener("pointermove", (event) => {
   }
 
   moveFingertip(event);
-
-  if (event.pointerId === fingertipPointerId) {
-    pressFingertipKey(event);
-  }
 });
 
 instrument.addEventListener("pointerup", (event) => {
@@ -253,20 +308,18 @@ instrument.addEventListener("pointerup", (event) => {
   }
 
   fingertipPointerId = null;
-  fingertip.classList.remove("is-pressing");
-  releaseFingertipKey();
+  setFingertipDepth(0);
 });
 
 instrument.addEventListener("pointerleave", () => {
   if (currentMode === "fingertip" && fingertipPointerId === null) {
     fingertip.classList.remove("is-visible");
+    setFingertipHover(null);
   }
 });
 
 instrument.addEventListener("pointercancel", () => {
-  fingertipPointerId = null;
-  fingertip.classList.remove("is-pressing");
-  releaseFingertipKey();
+  resetFingertip();
 });
 
 modeButtons.forEach((button) => {
@@ -278,6 +331,16 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (currentMode === "fingertip" && event.code === "Space") {
+    event.preventDefault();
+    setFingertipDepth(1);
+    return;
+  }
+
+  if (currentMode !== "play") {
+    return;
+  }
+
   const key = keyForBinding(event.key);
 
   if (key) {
@@ -286,6 +349,16 @@ window.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("keyup", (event) => {
+  if (currentMode === "fingertip" && event.code === "Space") {
+    event.preventDefault();
+    setFingertipDepth(0);
+    return;
+  }
+
+  if (currentMode !== "play") {
+    return;
+  }
+
   const key = keyForBinding(event.key);
 
   if (key) {

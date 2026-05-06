@@ -19,7 +19,7 @@ Controls:
 - White keys: `A S D F G H J K`
 - Black keys: `W E T Y U`
 - Mouse/touch: press the on-screen keys
-- `Fingertip` mode: drag the virtual fingertip across the keyboard to test collision-style key presses
+- `Fingertip` mode: move the virtual fingertip, then hold pointer or `Space` to simulate press depth
 
 The browser prototype uses the Web Audio API, so no external dependencies are required.
 
