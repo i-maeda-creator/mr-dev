@@ -15,7 +15,15 @@ const keyData = [
 ];
 
 const keysRoot = document.querySelector("#pianoKeys");
+const instrument = document.querySelector(".instrument");
+const fingertip = document.querySelector("#fingertip");
+const modeButtons = document.querySelectorAll(".mode-button");
+const modeStatus = document.querySelector("#modeStatus");
 const pressedKeys = new Map();
+const pointerPressedKeys = new Set();
+let currentMode = "play";
+let fingertipPointerId = null;
+let fingertipKeyId = null;
 let audioContext;
 
 function ensureAudioContext() {
@@ -88,6 +96,22 @@ function releaseKey(id) {
   pressedKeys.delete(id);
 }
 
+function setMode(mode) {
+  currentMode = mode;
+  modeButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.mode === mode);
+  });
+
+  if (mode === "play") {
+    modeStatus.textContent = "Keyboard and pointer input";
+    fingertip.classList.remove("is-visible", "is-pressing");
+    releaseFingertipKey();
+    return;
+  }
+
+  modeStatus.textContent = "Drag the virtual fingertip across keys";
+}
+
 function renderKeys() {
   const whiteKeys = keyData.filter((key) => key.type === "white");
   const blackKeys = keyData.filter((key) => key.type === "black");
@@ -116,9 +140,51 @@ function keyForBinding(binding) {
   return keyData.find((key) => key.binding.toLowerCase() === binding.toLowerCase());
 }
 
+function keyAtPoint(clientX, clientY) {
+  const elements = document.elementsFromPoint(clientX, clientY);
+  return elements.find((element) => element.classList?.contains("key"));
+}
+
+function moveFingertip(event) {
+  const bounds = instrument.getBoundingClientRect();
+  const x = event.clientX - bounds.left + instrument.scrollLeft;
+  const y = event.clientY - bounds.top + instrument.scrollTop;
+
+  fingertip.style.left = `${x}px`;
+  fingertip.style.top = `${y}px`;
+  fingertip.classList.add("is-visible");
+}
+
+function pressFingertipKey(event) {
+  const keyElement = keyAtPoint(event.clientX, event.clientY);
+  const nextKeyId = keyElement?.dataset.keyId ?? null;
+
+  if (nextKeyId === fingertipKeyId) {
+    return;
+  }
+
+  releaseFingertipKey();
+
+  if (nextKeyId) {
+    fingertipKeyId = nextKeyId;
+    pressKey(nextKeyId);
+  }
+}
+
+function releaseFingertipKey() {
+  if (fingertipKeyId) {
+    releaseKey(fingertipKeyId);
+    fingertipKeyId = null;
+  }
+}
+
 renderKeys();
 
 keysRoot.addEventListener("pointerdown", (event) => {
+  if (currentMode !== "play") {
+    return;
+  }
+
   const keyElement = event.target.closest(".key");
 
   if (!keyElement) {
@@ -126,23 +192,85 @@ keysRoot.addEventListener("pointerdown", (event) => {
   }
 
   keyElement.setPointerCapture(event.pointerId);
+  pointerPressedKeys.add(keyElement.dataset.keyId);
   pressKey(keyElement.dataset.keyId);
 });
 
 keysRoot.addEventListener("pointerup", (event) => {
+  if (currentMode !== "play") {
+    return;
+  }
+
   const keyElement = event.target.closest(".key");
 
-  if (keyElement) {
+  if (keyElement && pointerPressedKeys.has(keyElement.dataset.keyId)) {
+    pointerPressedKeys.delete(keyElement.dataset.keyId);
     releaseKey(keyElement.dataset.keyId);
   }
 });
 
 keysRoot.addEventListener("pointercancel", (event) => {
+  if (currentMode !== "play") {
+    return;
+  }
+
   const keyElement = event.target.closest(".key");
 
-  if (keyElement) {
+  if (keyElement && pointerPressedKeys.has(keyElement.dataset.keyId)) {
+    pointerPressedKeys.delete(keyElement.dataset.keyId);
     releaseKey(keyElement.dataset.keyId);
   }
+});
+
+instrument.addEventListener("pointerdown", (event) => {
+  if (currentMode !== "fingertip") {
+    return;
+  }
+
+  event.preventDefault();
+  fingertipPointerId = event.pointerId;
+  instrument.setPointerCapture(event.pointerId);
+  fingertip.classList.add("is-pressing");
+  moveFingertip(event);
+  pressFingertipKey(event);
+});
+
+instrument.addEventListener("pointermove", (event) => {
+  if (currentMode !== "fingertip") {
+    return;
+  }
+
+  moveFingertip(event);
+
+  if (event.pointerId === fingertipPointerId) {
+    pressFingertipKey(event);
+  }
+});
+
+instrument.addEventListener("pointerup", (event) => {
+  if (event.pointerId !== fingertipPointerId) {
+    return;
+  }
+
+  fingertipPointerId = null;
+  fingertip.classList.remove("is-pressing");
+  releaseFingertipKey();
+});
+
+instrument.addEventListener("pointerleave", () => {
+  if (currentMode === "fingertip" && fingertipPointerId === null) {
+    fingertip.classList.remove("is-visible");
+  }
+});
+
+instrument.addEventListener("pointercancel", () => {
+  fingertipPointerId = null;
+  fingertip.classList.remove("is-pressing");
+  releaseFingertipKey();
+});
+
+modeButtons.forEach((button) => {
+  button.addEventListener("click", () => setMode(button.dataset.mode));
 });
 
 window.addEventListener("keydown", (event) => {

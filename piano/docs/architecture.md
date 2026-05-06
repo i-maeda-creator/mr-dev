@@ -24,6 +24,7 @@ Prototype inputs:
 
 - PC keyboard
 - Mouse or touch pointer
+- Virtual fingertip collision mode
 
 Future MR inputs:
 
@@ -73,4 +74,3 @@ Suggested Unity components later:
 - `PianoSoundEngine`
 
 The important boundary is that input providers should only say "key down" and "key up". They should not own note playback or key animation directly.
-

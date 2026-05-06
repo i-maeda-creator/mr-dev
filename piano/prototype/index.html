@@ -15,9 +15,15 @@
           <p class="summary">
             Quest 3に移す前に、鍵盤、入力、音、反応の気持ちよさをここで育てます。
           </p>
+          <div class="controls" aria-label="Prototype mode">
+            <button class="mode-button is-active" type="button" data-mode="play">Play</button>
+            <button class="mode-button" type="button" data-mode="fingertip">Fingertip</button>
+            <span class="mode-status" id="modeStatus">Keyboard and pointer input</span>
+          </div>
         </div>
 
         <div class="instrument" aria-label="One octave piano">
+          <div class="fingertip" id="fingertip" aria-hidden="true"></div>
           <div class="keys" id="pianoKeys"></div>
         </div>
       </section>
